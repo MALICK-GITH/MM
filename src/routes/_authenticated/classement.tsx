@@ -1,22 +1,34 @@
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
-import { Crown } from "lucide-react";
+import { Crown, TrendingUp } from "lucide-react";
 
 import { EmptyState, PageTitle, StatusChip } from "@/components/skill2cash/ui-bits";
 import { useMe } from "@/hooks/use-s2c";
 import { supabase } from "@/integrations/supabase/client";
-import { fcfa, type Profile } from "@/lib/s2c";
+import { fcfa } from "@/lib/s2c";
+
+type LeaderboardEntry = {
+  rank: number;
+  user_id: string;
+  username: string;
+  efootball_username: string;
+  elo_rating: number;
+  wins: number;
+  losses: number;
+  win_rate: number;
+  total_earnings: number;
+};
 
 export const Route = createFileRoute("/_authenticated/classement")({
   head: () => ({
     meta: [
-      { title: "Classement — SKILL2CASH" },
+      { title: "Classement ELO — SKILL2CASH" },
       {
         name: "description",
-        content: "Le classement des meilleurs joueurs eFootball par gains cumulés et victoires.",
+        content: "Le classement ELO des meilleurs joueurs eFootball basé sur leur niveau de compétition.",
       },
-      { property: "og:title", content: "Classement — SKILL2CASH" },
-      { property: "og:description", content: "Top joueurs par gains et victoires." },
+      { property: "og:title", content: "Classement ELO — SKILL2CASH" },
+      { property: "og:description", content: "Top joueurs par classement ELO." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
     ],
@@ -30,15 +42,12 @@ function LeaderboardPage() {
   const board = useQuery({
     queryKey: ["leaderboard"],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("profiles")
-        .select("*")
-        .eq("is_banned", false)
-        .order("total_earnings", { ascending: false })
-        .order("wins", { ascending: false })
-        .limit(100);
+      const { data, error } = await supabase.rpc("get_leaderboard", {
+        limit_count: 100,
+        offset_count: 0,
+      });
       if (error) throw error;
-      return (data ?? []) as Profile[];
+      return (data ?? []) as LeaderboardEntry[];
     },
   });
 
@@ -46,41 +55,39 @@ function LeaderboardPage() {
 
   return (
     <div>
-      <PageTitle title="Classement" subtitle="Les joueurs les plus rentables de l'arène." />
+      <PageTitle title="Classement ELO" subtitle="Les meilleurs joueurs classés par niveau de compétition." />
       {rows.length ? (
         <div className="panel divide-y divide-border/50 clip-corner">
-          {rows.map((p, i) => {
-            const played = p.wins + p.losses + p.draws;
+          {rows.map((p) => {
+            const played = p.wins + p.losses;
             return (
               <div
-                key={p.id}
+                key={p.user_id}
                 className={
-                  p.id === user?.id
+                  p.user_id === user?.id
                     ? "flex items-center gap-4 bg-primary/10 px-4 py-3"
                     : "flex items-center gap-4 px-4 py-3"
                 }
               >
                 <span className="w-8 font-display text-lg font-bold text-muted-foreground">
-                  {i + 1}
+                  #{p.rank}
                 </span>
-                {i === 0 ? <Crown className="size-4 text-accent" /> : null}
+                {p.rank === 1 ? <Crown className="size-4 text-accent" /> : null}
                 <div className="min-w-0 flex-1">
                   <p className="truncate font-display text-sm font-bold text-primary">
                     {p.username}
-                    {p.badge ? (
-                      <span className="ml-2 font-mono text-[10px] text-neon">{p.badge}</span>
-                    ) : null}
                   </p>
                   <p className="text-xs text-muted-foreground">
-                    {p.wins}V · {p.draws}N · {p.losses}D
-                    {played ? ` · ${Math.round((p.wins / played) * 100)}%` : ""} · série{" "}
-                    {p.current_streak}
+                    {p.wins}V · {p.losses}D
+                    {played ? ` · ${p.win_rate}% victoires` : ""} · {fcfa(p.total_earnings)}
                   </p>
                 </div>
-                <StatusChip status="active" label={p.level} />
-                <p className="font-display text-sm font-bold text-accent">
-                  {fcfa(p.total_earnings)}
-                </p>
+                <div className="flex items-center gap-2">
+                  <TrendingUp className="size-4 text-neon" />
+                  <p className="font-display text-sm font-bold text-neon">
+                    {p.elo_rating}
+                  </p>
+                </div>
               </div>
             );
           })}

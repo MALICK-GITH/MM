@@ -3,6 +3,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useState } from "react";
 import { toast } from "sonner";
+import { TrendingUp } from "lucide-react";
 
 import { EmptyState, PageTitle, StatCard, StatusChip } from "@/components/skill2cash/ui-bits";
 import { Button } from "@/components/ui/button";
@@ -136,13 +137,19 @@ function ProfilePage() {
         action={<StatusChip status={profile?.status ?? "active"} label={profile?.level} />}
       />
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
         <StatCard label="Duels joués" value={played} />
         <StatCard
           label="Bilan"
           value={`${profile?.wins ?? 0}V · ${profile?.draws ?? 0}N · ${profile?.losses ?? 0}D`}
         />
         <StatCard label="Gains cumulés" value={fcfa(profile?.total_earnings)} tone="accent" />
+        <StatCard
+          label="Classement ELO"
+          value={profile?.elo_rating ?? 1000}
+          icon={<TrendingUp className="size-4 text-neon" />}
+          tone="neon"
+        />
         <StatCard
           label="Réputation"
           value={`${profile?.reputation ?? 100}/100`}
