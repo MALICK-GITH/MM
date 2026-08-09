@@ -146,7 +146,7 @@ RETURNS TABLE (
   total_earnings NUMERIC
 ) LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$
   SELECT 
-    ROW_NUMBER() OVER (ORDER BY p.elo_rating DESC) as rank,
+    ROW_NUMBER() OVER (ORDER BY p.elo_rating DESC, p.wins DESC, p.total_earnings DESC, p.created_at ASC) as rank,
     p.id as user_id,
     p.username,
     p.efootball_username,
@@ -161,7 +161,7 @@ RETURNS TABLE (
     p.total_earnings
   FROM public.profiles p
   WHERE p.status = 'active' AND NOT p.is_banned
-  ORDER BY p.elo_rating DESC
+  ORDER BY p.elo_rating DESC, p.wins DESC, p.total_earnings DESC, p.created_at ASC
   LIMIT limit_count
   OFFSET offset_count;
 $$;
