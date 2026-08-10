@@ -93,8 +93,8 @@ function AdminPage() {
         supabase
           .from("username_change_requests")
           .select("*")
-          .eq("status", "pending")
-          .order("created_at", { ascending: true }),
+          .order("created_at", { ascending: false })
+          .limit(50),
         usersQuery,
       ]);
 
@@ -194,7 +194,7 @@ function AdminPage() {
         <StatCard label="Dépôts en attente" value={d?.deposits.length ?? 0} tone="neon" />
         <StatCard label="Retraits en attente" value={d?.withdrawals.filter(w => w.status === 'pending').length ?? 0} tone="neon" />
         <StatCard label="Litiges ouverts" value={d?.disputes.length ?? 0} tone="danger" />
-        <StatCard label="Demandes de pseudo" value={d?.usernames.length ?? 0} />
+        <StatCard label="Demandes de pseudo" value={d?.usernames.filter(u => u.status === 'pending').length ?? 0} />
       </div>
 
       <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -514,47 +514,59 @@ function AdminPage() {
         <TabsContent value="usernames" className="mt-4 space-y-3">
           {d?.usernames.length ? (
             d.usernames.map((r) => (
-              <div key={r.id} className="panel p-4 clip-corner">
-                <p className="font-display text-base font-bold text-primary">
-                  {p(r.user_id)} → {r.new_username}
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  {r.reason ?? "Sans motif"} · {dateFr(r.created_at)}
-                </p>
-                <div className="mt-3 flex flex-wrap items-center gap-2">
-                  <NoteField id={r.id} />
-                  <Button
-                    size="sm"
-                    disabled={act.isPending}
-                    onClick={() =>
-                      act.mutate(() =>
-                        supabase.rpc("admin_review_username_change", {
-                          p_request: r.id,
-                          p_approve: true,
-                          ...(note(r.id) ? { p_note: note(r.id)! } : {}),
-                        }),
-                      )
-                    }
-                  >
-                    Approuver
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="destructive"
-                    disabled={act.isPending}
-                    onClick={() =>
-                      act.mutate(() =>
-                        supabase.rpc("admin_review_username_change", {
-                          p_request: r.id,
-                          p_approve: false,
-                          ...(note(r.id) ? { p_note: note(r.id)! } : {}),
-                        }),
-                      )
-                    }
-                  >
-                    Refuser
-                  </Button>
+              <div key={r.id} className={`panel p-4 clip-corner ${r.status === 'pending' ? 'border-accent/50 bg-accent/5' : ''}`}>
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <p className="font-display text-base font-bold text-primary">
+                      {p(r.user_id)} → {r.new_username}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {r.reason ?? "Sans motif"} · {dateFr(r.created_at)}
+                    </p>
+                  </div>
+                  <StatusChip status={r.status} label={REQUEST_STATUS_LABELS[r.status]} />
                 </div>
+                {r.status === 'pending' && (
+                  <div className="mt-3 flex flex-wrap items-center gap-2">
+                    <NoteField id={r.id} />
+                    <Button
+                      size="sm"
+                      disabled={act.isPending}
+                      onClick={() =>
+                        act.mutate(() =>
+                          supabase.rpc("admin_review_username_change", {
+                            p_request: r.id,
+                            p_approve: true,
+                            ...(note(r.id) ? { p_note: note(r.id)! } : {}),
+                          }),
+                        )
+                      }
+                    >
+                      Approuver
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="destructive"
+                      disabled={act.isPending}
+                      onClick={() =>
+                        act.mutate(() =>
+                          supabase.rpc("admin_review_username_change", {
+                            p_request: r.id,
+                            p_approve: false,
+                            ...(note(r.id) ? { p_note: note(r.id)! } : {}),
+                          }),
+                        )
+                      }
+                    >
+                      Refuser
+                    </Button>
+                  </div>
+                )}
+                {r.status !== 'pending' && r.reviewed_by && (
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    Traité par {p(r.reviewed_by)} · {dateFr(r.reviewed_at)}
+                  </p>
+                )}
               </div>
             ))
           ) : (
