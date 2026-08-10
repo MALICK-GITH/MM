@@ -23,6 +23,7 @@ import {
   type UsernameChangeRequest,
   type Withdrawal,
 } from "@/lib/s2c";
+import { Bar, BarChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 
 export const Route = createFileRoute("/_authenticated/admin")({
   head: () => ({
@@ -136,6 +137,26 @@ function AdminPage() {
     },
   });
 
+  const revenueStats = useQuery({
+    queryKey: ["revenue-stats"],
+    enabled: isAdmin,
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc("get_platform_revenue_stats", { p_days_back: 30 });
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  const revenueEvolution = useQuery({
+    queryKey: ["revenue-evolution"],
+    enabled: isAdmin,
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc("get_revenue_evolution", { p_days_back: 30 });
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
+
   const note = (id: string) => notes[id]?.trim().slice(0, 300) || undefined;
 
   if (loading) return <EmptyState text="Chargement…" />;
@@ -175,6 +196,44 @@ function AdminPage() {
         <StatCard label="Litiges ouverts" value={d?.disputes.length ?? 0} tone="danger" />
         <StatCard label="Demandes de pseudo" value={d?.usernames.length ?? 0} />
       </div>
+
+      <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <StatCard label="Revenus 30j" value={fcfa(revenueStats.data?.total_revenue)} tone="accent" />
+        <StatCard label="Duels terminés" value={revenueStats.data?.total_duels_count ?? 0} />
+        <StatCard label="Commission/duel" value={fcfa(revenueStats.data?.avg_commission_per_duel)} />
+        <StatCard label="Revenu/jour" value={fcfa(revenueStats.data?.daily_revenue)} />
+      </div>
+
+      <section className="mt-8 panel p-5 clip-corner">
+        <h2 className="font-display text-sm font-bold tracking-widest uppercase mb-4">Évolution des revenus (30 jours)</h2>
+        <ResponsiveContainer width="100%" height={250}>
+          <BarChart data={revenueEvolution.data}>
+            <XAxis 
+              dataKey="date" 
+              tick={{ fontSize: 11 }}
+              stroke="hsl(var(--muted-foreground))"
+            />
+            <YAxis 
+              tick={{ fontSize: 11 }}
+              stroke="hsl(var(--muted-foreground))"
+              tickFormatter={(value) => `${value / 1000}k`}
+            />
+            <Tooltip 
+              contentStyle={{ 
+                backgroundColor: "hsl(var(--card))",
+                border: "1px solid hsl(var(--border))",
+                borderRadius: "8px"
+              }}
+              formatter={(value: number) => fcfa(value)}
+            />
+            <Bar 
+              dataKey="revenue" 
+              fill="hsl(var(--accent))" 
+              radius={[4, 4, 0, 0]}
+            />
+          </BarChart>
+        </ResponsiveContainer>
+      </section>
 
       <Tabs defaultValue="deposits" className="mt-8">
         <TabsList className="flex-wrap">
