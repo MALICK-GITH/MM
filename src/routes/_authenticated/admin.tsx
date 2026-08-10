@@ -82,8 +82,8 @@ function AdminPage() {
         supabase
           .from("withdrawals")
           .select("*")
-          .eq("status", "pending")
-          .order("created_at", { ascending: true }),
+          .order("created_at", { ascending: false })
+          .limit(50),
         supabase
           .from("duels")
           .select("*")
@@ -171,7 +171,7 @@ function AdminPage() {
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard label="Dépôts en attente" value={d?.deposits.length ?? 0} tone="neon" />
-        <StatCard label="Retraits en attente" value={d?.withdrawals.length ?? 0} tone="neon" />
+        <StatCard label="Retraits en attente" value={d?.withdrawals.filter(w => w.status === 'pending').length ?? 0} tone="neon" />
         <StatCard label="Litiges ouverts" value={d?.disputes.length ?? 0} tone="danger" />
         <StatCard label="Demandes de pseudo" value={d?.usernames.length ?? 0} />
       </div>
@@ -272,7 +272,7 @@ function AdminPage() {
         <TabsContent value="withdrawals" className="mt-4 space-y-3">
           {d?.withdrawals.length ? (
             d.withdrawals.map((w) => (
-              <div key={w.id} className="panel p-4 clip-corner">
+              <div key={w.id} className={`panel p-4 clip-corner ${w.status === 'pending' ? 'border-accent/50 bg-accent/5' : ''}`}>
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>
                     <p className="font-display text-lg font-bold text-primary">
@@ -290,44 +290,49 @@ function AdminPage() {
                   </div>
                   <StatusChip status={w.status} label={REQUEST_STATUS_LABELS[w.status]} />
                 </div>
-                <div className="mt-3 flex flex-wrap items-center gap-2">
-                  <NoteField id={w.id} />
-                  <Button
-                    size="sm"
-                    disabled={act.isPending}
-                    onClick={() =>
-                      act.mutate(() =>
-                        supabase.rpc("admin_review_withdrawal", {
-                          p_withdrawal: w.id,
-                          p_approve: true,
-                          ...(note(w.id) ? { p_note: note(w.id)! } : {}),
-                        }),
-                      )
-                    }
-                  >
-                    Payé / Valider
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="destructive"
-                    disabled={act.isPending}
-                    onClick={() =>
-                      act.mutate(() =>
-                        supabase.rpc("admin_review_withdrawal", {
-                          p_withdrawal: w.id,
-                          p_approve: false,
-                          ...(note(w.id) ? { p_note: note(w.id)! } : {}),
-                        }),
-                      )
-                    }
-                  >
-                    Refuser
-                  </Button>
-                </div>
+                {w.status === 'pending' && (
+                  <div className="mt-3 flex flex-wrap items-center gap-2">
+                    <NoteField id={w.id} />
+                    <Button
+                      size="sm"
+                      disabled={act.isPending}
+                      onClick={() =>
+                        act.mutate(() =>
+                          supabase.rpc("admin_review_withdrawal", {
+                            p_withdrawal: w.id,
+                            p_approve: true,
+                            ...(note(w.id) ? { p_note: note(w.id)! } : {}),
+                          }),
+                        )
+                      }
+                    >
+                      Payé / Valider
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="destructive"
+                      disabled={act.isPending}
+                      onClick={() =>
+                        act.mutate(() =>
+                          supabase.rpc("admin_review_withdrawal", {
+                            p_withdrawal: w.id,
+                            p_approve: false,
+                            ...(note(w.id) ? { p_note: note(w.id)! } : {}),
+                          }),
+                        )
+                      }
+                    >
+                      Refuser
+                    </Button>
+                  </div>
+                )}
+                {w.status !== 'pending' && w.admin_note && (
+                  <p className="mt-2 text-xs text-muted-foreground">Note: {w.admin_note}</p>
+                )}
               </div>
             ))
           ) : (
-            <EmptyState text="Aucun retrait en attente." />
+            <EmptyState text="Aucun retrait." />
           )}
         </TabsContent>
 
