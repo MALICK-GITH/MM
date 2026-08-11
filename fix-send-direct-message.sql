@@ -54,12 +54,12 @@ BEGIN
   END IF;
 
   -- Vérifier que l'utilisateur fait partie de la conversation
-  IF c.user1_id != v_me AND c.user2_id != v_me THEN
+  IF c.user_low != v_me AND c.user_high != v_me THEN
     RAISE EXCEPTION 'Vous n''êtes pas autorisé à envoyer dans cette conversation';
   END IF;
 
   -- Déterminer l'autre utilisateur
-  v_other := CASE WHEN c.user1_id = v_me THEN c.user2_id ELSE c.user1_id END;
+  v_other := CASE WHEN c.user_low = v_me THEN c.user_high ELSE c.user_low END;
 
   -- Créer le message
   INSERT INTO public.conversation_messages (
