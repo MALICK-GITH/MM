@@ -36,6 +36,12 @@ export async function registerNotificationWorker(): Promise<ServiceWorkerRegistr
 async function initializeFirebaseMessaging(userId: string | undefined) {
   if (typeof window === "undefined" || !userId) return null;
 
+  // Vérifier la permission avant d'initialiser
+  if (Notification.permission !== "granted") {
+    console.log("Permission de notification non accordée, initialisation Firebase annulée");
+    return null;
+  }
+
   try {
     // Initialiser Firebase avec les imports statiques
     const app = initializeApp(firebaseConfig);
@@ -108,7 +114,8 @@ export function usePushNotifications(userId: string | undefined, onNotify?: () =
   useEffect(() => {
     setPermission(currentPermission());
     void registerNotificationWorker();
-    if (userId) {
+    // N'initialiser Firebase que si la permission est déjà accordée
+    if (userId && currentPermission() === "granted") {
       void initializeFirebaseMessaging(userId);
     }
   }, [userId]);
@@ -123,6 +130,10 @@ export function usePushNotifications(userId: string | undefined, onNotify?: () =
     setPermission(result as PermissionState);
     if (result === "granted") {
       toast.success("Notifications activées 🔔");
+      // Initialiser Firebase après avoir obtenu la permission
+      if (userId) {
+        void initializeFirebaseMessaging(userId);
+      }
       void showSystemNotification({
         id: "welcome",
         user_id: userId ?? null,
