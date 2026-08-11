@@ -23,6 +23,7 @@ import {
   type UsernameChangeRequest,
   type Withdrawal,
 } from "@/lib/s2c";
+import { Bar, BarChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 
 export const Route = createFileRoute("/_authenticated/admin")({
   head: () => ({
@@ -82,8 +83,8 @@ function AdminPage() {
         supabase
           .from("withdrawals")
           .select("*")
-          .eq("status", "pending")
-          .order("created_at", { ascending: true }),
+          .order("created_at", { ascending: false })
+          .limit(50),
         supabase
           .from("duels")
           .select("*")
@@ -92,8 +93,8 @@ function AdminPage() {
         supabase
           .from("username_change_requests")
           .select("*")
-          .eq("status", "pending")
-          .order("created_at", { ascending: true }),
+          .order("created_at", { ascending: false })
+          .limit(50),
         usersQuery,
       ]);
 
@@ -136,6 +137,26 @@ function AdminPage() {
     },
   });
 
+  const revenueStats = useQuery({
+    queryKey: ["revenue-stats"],
+    enabled: isAdmin,
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc("get_platform_revenue_stats", { p_days_back: 30 });
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  const revenueEvolution = useQuery({
+    queryKey: ["revenue-evolution"],
+    enabled: isAdmin,
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc("get_revenue_evolution", { p_days_back: 30 });
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
+
   const note = (id: string) => notes[id]?.trim().slice(0, 300) || undefined;
 
   if (loading) return <EmptyState text="Chargement…" />;
@@ -171,10 +192,48 @@ function AdminPage() {
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard label="Dépôts en attente" value={d?.deposits.length ?? 0} tone="neon" />
-        <StatCard label="Retraits en attente" value={d?.withdrawals.length ?? 0} tone="neon" />
+        <StatCard label="Retraits en attente" value={d?.withdrawals.filter(w => w.status === 'pending').length ?? 0} tone="neon" />
         <StatCard label="Litiges ouverts" value={d?.disputes.length ?? 0} tone="danger" />
-        <StatCard label="Demandes de pseudo" value={d?.usernames.length ?? 0} />
+        <StatCard label="Demandes de pseudo" value={d?.usernames.filter(u => u.status === 'pending').length ?? 0} />
       </div>
+
+      <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <StatCard label="Revenus 30j" value={fcfa(revenueStats.data?.total_revenue)} tone="accent" />
+        <StatCard label="Duels terminés" value={revenueStats.data?.total_duels_count ?? 0} />
+        <StatCard label="Commission/duel" value={fcfa(revenueStats.data?.avg_commission_per_duel)} />
+        <StatCard label="Revenu/jour" value={fcfa(revenueStats.data?.daily_revenue)} />
+      </div>
+
+      <section className="mt-8 panel p-5 clip-corner">
+        <h2 className="font-display text-sm font-bold tracking-widest uppercase mb-4">Évolution des revenus (30 jours)</h2>
+        <ResponsiveContainer width="100%" height={250}>
+          <BarChart data={revenueEvolution.data}>
+            <XAxis 
+              dataKey="date" 
+              tick={{ fontSize: 11 }}
+              stroke="hsl(var(--muted-foreground))"
+            />
+            <YAxis 
+              tick={{ fontSize: 11 }}
+              stroke="hsl(var(--muted-foreground))"
+              tickFormatter={(value) => `${value / 1000}k`}
+            />
+            <Tooltip 
+              contentStyle={{ 
+                backgroundColor: "hsl(var(--card))",
+                border: "1px solid hsl(var(--border))",
+                borderRadius: "8px"
+              }}
+              formatter={(value: number) => fcfa(value)}
+            />
+            <Bar 
+              dataKey="revenue" 
+              fill="hsl(var(--accent))" 
+              radius={[4, 4, 0, 0]}
+            />
+          </BarChart>
+        </ResponsiveContainer>
+      </section>
 
       <Tabs defaultValue="deposits" className="mt-8">
         <TabsList className="flex-wrap">
@@ -272,7 +331,7 @@ function AdminPage() {
         <TabsContent value="withdrawals" className="mt-4 space-y-3">
           {d?.withdrawals.length ? (
             d.withdrawals.map((w) => (
-              <div key={w.id} className="panel p-4 clip-corner">
+              <div key={w.id} className={`panel p-4 clip-corner ${w.status === 'pending' ? 'border-accent/50 bg-accent/5' : ''}`}>
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>
                     <p className="font-display text-lg font-bold text-primary">
@@ -290,44 +349,49 @@ function AdminPage() {
                   </div>
                   <StatusChip status={w.status} label={REQUEST_STATUS_LABELS[w.status]} />
                 </div>
-                <div className="mt-3 flex flex-wrap items-center gap-2">
-                  <NoteField id={w.id} />
-                  <Button
-                    size="sm"
-                    disabled={act.isPending}
-                    onClick={() =>
-                      act.mutate(() =>
-                        supabase.rpc("admin_review_withdrawal", {
-                          p_withdrawal: w.id,
-                          p_approve: true,
-                          ...(note(w.id) ? { p_note: note(w.id)! } : {}),
-                        }),
-                      )
-                    }
-                  >
-                    Payé / Valider
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="destructive"
-                    disabled={act.isPending}
-                    onClick={() =>
-                      act.mutate(() =>
-                        supabase.rpc("admin_review_withdrawal", {
-                          p_withdrawal: w.id,
-                          p_approve: false,
-                          ...(note(w.id) ? { p_note: note(w.id)! } : {}),
-                        }),
-                      )
-                    }
-                  >
-                    Refuser
-                  </Button>
-                </div>
+                {w.status === 'pending' && (
+                  <div className="mt-3 flex flex-wrap items-center gap-2">
+                    <NoteField id={w.id} />
+                    <Button
+                      size="sm"
+                      disabled={act.isPending}
+                      onClick={() =>
+                        act.mutate(() =>
+                          supabase.rpc("admin_review_withdrawal", {
+                            p_withdrawal: w.id,
+                            p_approve: true,
+                            ...(note(w.id) ? { p_note: note(w.id)! } : {}),
+                          }),
+                        )
+                      }
+                    >
+                      Payé / Valider
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="destructive"
+                      disabled={act.isPending}
+                      onClick={() =>
+                        act.mutate(() =>
+                          supabase.rpc("admin_review_withdrawal", {
+                            p_withdrawal: w.id,
+                            p_approve: false,
+                            ...(note(w.id) ? { p_note: note(w.id)! } : {}),
+                          }),
+                        )
+                      }
+                    >
+                      Refuser
+                    </Button>
+                  </div>
+                )}
+                {w.status !== 'pending' && w.admin_note && (
+                  <p className="mt-2 text-xs text-muted-foreground">Note: {w.admin_note}</p>
+                )}
               </div>
             ))
           ) : (
-            <EmptyState text="Aucun retrait en attente." />
+            <EmptyState text="Aucun retrait." />
           )}
         </TabsContent>
 
@@ -450,47 +514,59 @@ function AdminPage() {
         <TabsContent value="usernames" className="mt-4 space-y-3">
           {d?.usernames.length ? (
             d.usernames.map((r) => (
-              <div key={r.id} className="panel p-4 clip-corner">
-                <p className="font-display text-base font-bold text-primary">
-                  {p(r.user_id)} → {r.new_username}
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  {r.reason ?? "Sans motif"} · {dateFr(r.created_at)}
-                </p>
-                <div className="mt-3 flex flex-wrap items-center gap-2">
-                  <NoteField id={r.id} />
-                  <Button
-                    size="sm"
-                    disabled={act.isPending}
-                    onClick={() =>
-                      act.mutate(() =>
-                        supabase.rpc("admin_review_username_change", {
-                          p_request: r.id,
-                          p_approve: true,
-                          ...(note(r.id) ? { p_note: note(r.id)! } : {}),
-                        }),
-                      )
-                    }
-                  >
-                    Approuver
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="destructive"
-                    disabled={act.isPending}
-                    onClick={() =>
-                      act.mutate(() =>
-                        supabase.rpc("admin_review_username_change", {
-                          p_request: r.id,
-                          p_approve: false,
-                          ...(note(r.id) ? { p_note: note(r.id)! } : {}),
-                        }),
-                      )
-                    }
-                  >
-                    Refuser
-                  </Button>
+              <div key={r.id} className={`panel p-4 clip-corner ${r.status === 'pending' ? 'border-accent/50 bg-accent/5' : ''}`}>
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <p className="font-display text-base font-bold text-primary">
+                      {p(r.user_id)} → {r.new_username}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {r.reason ?? "Sans motif"} · {dateFr(r.created_at)}
+                    </p>
+                  </div>
+                  <StatusChip status={r.status} label={REQUEST_STATUS_LABELS[r.status]} />
                 </div>
+                {r.status === 'pending' && (
+                  <div className="mt-3 flex flex-wrap items-center gap-2">
+                    <NoteField id={r.id} />
+                    <Button
+                      size="sm"
+                      disabled={act.isPending}
+                      onClick={() =>
+                        act.mutate(() =>
+                          supabase.rpc("admin_review_username_change", {
+                            p_request: r.id,
+                            p_approve: true,
+                            ...(note(r.id) ? { p_note: note(r.id)! } : {}),
+                          }),
+                        )
+                      }
+                    >
+                      Approuver
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="destructive"
+                      disabled={act.isPending}
+                      onClick={() =>
+                        act.mutate(() =>
+                          supabase.rpc("admin_review_username_change", {
+                            p_request: r.id,
+                            p_approve: false,
+                            ...(note(r.id) ? { p_note: note(r.id)! } : {}),
+                          }),
+                        )
+                      }
+                    >
+                      Refuser
+                    </Button>
+                  </div>
+                )}
+                {r.status !== 'pending' && r.reviewed_by && (
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    Traité par {p(r.reviewed_by)} · {dateFr(r.reviewed_at)}
+                  </p>
+                )}
               </div>
             ))
           ) : (

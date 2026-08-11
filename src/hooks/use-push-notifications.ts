@@ -2,6 +2,9 @@ import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
 import { supabase } from "@/integrations/supabase/client";
+import { firebaseConfig } from "@/lib/firebase-config";
+import { initializeApp } from "firebase/app";
+import { getMessaging, getToken, onMessage } from "firebase/messaging";
 
 type NotifRow = {
   id: string;
@@ -19,12 +22,61 @@ function currentPermission(): PermissionState {
   return Notification.permission as PermissionState;
 }
 
-/** Enregistre le service worker de notifications (une seule fois). */
+/** Enregistre le service worker de notifications Firebase (une seule fois). */
 export async function registerNotificationWorker(): Promise<ServiceWorkerRegistration | null> {
   if (typeof navigator === "undefined" || !("serviceWorker" in navigator)) return null;
   try {
-    return await navigator.serviceWorker.register("/sw.js");
+    return await navigator.serviceWorker.register("/firebase-messaging-sw.js");
   } catch {
+    return null;
+  }
+}
+
+/** Initialise Firebase Messaging et enregistre le token push */
+async function initializeFirebaseMessaging(userId: string | undefined) {
+  if (typeof window === "undefined" || !userId) return null;
+
+  // Vérifier la permission avant d'initialiser
+  if (Notification.permission !== "granted") {
+    console.log("Permission de notification non accordée, initialisation Firebase annulée");
+    return null;
+  }
+
+  try {
+    // Initialiser Firebase avec les imports statiques
+    const app = initializeApp(firebaseConfig);
+    const messaging = getMessaging(app);
+
+    // Obtenir le token FCM
+    const token = await getToken(messaging, {
+      vapidKey: "BJPHPvT-FSxzEqMGSIwWB6SeM-REDT1-PU9WCnCBSAuTIV2j8Y4prCoYVkBzU3AGmLfcb-Rig-yLiRB3FKFf-_8",
+    });
+
+    if (token) {
+      // Enregistrer le token dans Supabase
+      await supabase.rpc("register_push_subscription", {
+        p_token: token,
+        p_device_info: {
+          userAgent: navigator.userAgent,
+          platform: navigator.platform,
+        },
+      });
+      console.log("Token FCM enregistré:", token);
+    }
+
+    // Écouter les messages en premier plan
+    onMessage(messaging, (payload) => {
+      console.log("Message FCM reçu en premier plan:", payload);
+      if (payload.notification) {
+        toast(payload.notification.title || "Notification", {
+          description: payload.notification.body,
+        });
+      }
+    });
+
+    return token;
+  } catch (error) {
+    console.error("Erreur initialisation Firebase Messaging:", error);
     return null;
   }
 }
@@ -62,7 +114,11 @@ export function usePushNotifications(userId: string | undefined, onNotify?: () =
   useEffect(() => {
     setPermission(currentPermission());
     void registerNotificationWorker();
-  }, []);
+    // N'initialiser Firebase que si la permission est déjà accordée
+    if (userId && currentPermission() === "granted") {
+      void initializeFirebaseMessaging(userId);
+    }
+  }, [userId]);
 
   async function enable() {
     if (!("Notification" in window)) {
@@ -74,6 +130,10 @@ export function usePushNotifications(userId: string | undefined, onNotify?: () =
     setPermission(result as PermissionState);
     if (result === "granted") {
       toast.success("Notifications activées 🔔");
+      // Initialiser Firebase après avoir obtenu la permission
+      if (userId) {
+        void initializeFirebaseMessaging(userId);
+      }
       void showSystemNotification({
         id: "welcome",
         user_id: userId ?? null,

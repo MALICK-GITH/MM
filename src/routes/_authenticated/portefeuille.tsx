@@ -4,6 +4,7 @@ import { useState } from "react";
 import { toast } from "sonner";
 
 import { EmptyState, PageTitle, StatCard, StatusChip } from "@/components/skill2cash/ui-bits";
+import { BalanceEvolutionChart, WinsLossesChart, PerformanceStats } from "@/components/skill2cash/performance-charts";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -50,6 +51,7 @@ export const Route = createFileRoute("/_authenticated/portefeuille")({
 function WalletPage() {
   const { user, wallet } = useMe();
   const qc = useQueryClient();
+  const [days, setDays] = useState(30);
 
   const [dep, setDep] = useState({
     amount: "5000",
@@ -127,6 +129,35 @@ function WalletPage() {
         <StatCard label="Fonds bloqués" value={fcfa(wallet?.balance_locked)} tone="neon" />
         <StatCard label="Total déposé" value={fcfa(wallet?.total_deposited)} />
         <StatCard label="Total retiré" value={fcfa(wallet?.total_withdrawn)} />
+      </div>
+
+      <section className="mt-8">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="font-display text-sm font-bold tracking-widest uppercase">Performance</h2>
+          <Select value={days.toString()} onValueChange={(v) => setDays(Number(v))}>
+            <SelectTrigger className="w-32">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="7">7 jours</SelectItem>
+              <SelectItem value="30">30 jours</SelectItem>
+              <SelectItem value="90">90 jours</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        <PerformanceStats days={days} />
+      </section>
+
+      <div className="mt-8 grid gap-6 lg:grid-cols-2">
+        <section className="panel p-5 clip-corner">
+          <h2 className="font-display text-sm font-bold tracking-widest uppercase mb-4">Évolution du solde</h2>
+          <BalanceEvolutionChart days={days} />
+        </section>
+
+        <section className="panel p-5 clip-corner">
+          <h2 className="font-display text-sm font-bold tracking-widest uppercase mb-4">Gains vs Pertes</h2>
+          <WinsLossesChart days={days} />
+        </section>
       </div>
 
       <div className="mt-8 grid gap-6 lg:grid-cols-2">
