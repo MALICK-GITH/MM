@@ -8,8 +8,8 @@ RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
 DECLARE
   v_edge_url text;
 BEGIN
-  -- URL de l'Edge Function (à adapter selon ton environnement)
-  v_edge_url := 'https://your-project.supabase.co/functions/v1/send-push-notification';
+  -- URL de l'Edge Function
+  v_edge_url := 'https://jdyoozwiwbmhtsgkwqsq.supabase.co/functions/v1/send-push-notification';
   
   -- Envoyer la notification via l'Edge Function
   PERFORM net.http_post(
