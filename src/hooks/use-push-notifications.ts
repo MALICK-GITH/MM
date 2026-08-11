@@ -3,6 +3,8 @@ import { toast } from "sonner";
 
 import { supabase } from "@/integrations/supabase/client";
 import { firebaseConfig } from "@/lib/firebase-config";
+import { initializeApp } from "firebase/app";
+import { getMessaging, getToken, onMessage } from "firebase/messaging";
 
 type NotifRow = {
   id: string;
@@ -35,11 +37,7 @@ async function initializeFirebaseMessaging(userId: string | undefined) {
   if (typeof window === "undefined" || !userId) return null;
 
   try {
-    // Charger Firebase depuis le CDN
-    const { initializeApp } = await import('firebase/app');
-    const { getMessaging, getToken, onMessage } = await import('firebase/messaging');
-
-    // Initialiser Firebase
+    // Initialiser Firebase avec les imports statiques
     const app = initializeApp(firebaseConfig);
     const messaging = getMessaging(app);
 
